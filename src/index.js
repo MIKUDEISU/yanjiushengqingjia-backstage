@@ -3,6 +3,8 @@ import cors from 'cors'
 import { config } from './config.js'
 import { initDatabase } from './database.js'
 import authRoutes from './routes/auth.js'
+import leaveRoutes from './routes/leaves.js'
+import uploadRoutes from './routes/upload.js'
 
 const app = express()
 
@@ -12,6 +14,8 @@ app.use(express.json())
 initDatabase()
 
 app.use('/api/auth', authRoutes)
+app.use('/api/leaves', leaveRoutes)
+app.use('/api/upload', uploadRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() })
