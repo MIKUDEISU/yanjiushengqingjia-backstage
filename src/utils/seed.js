@@ -40,7 +40,7 @@ export function seedDatabase() {
       personal_phone, emergency_contact_name, emergency_contact_phone,
       status, stage, return_status, delay_status,
       current_step, total_steps, reject_reason
-    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `)
 
   const insertTimeline = db.prepare(`
@@ -71,7 +71,7 @@ export function seedDatabase() {
     for (const ld of leaveData) {
       const startDate = new Date(now.getTime() + ld.start * 86400000)
       const endDate = new Date(startDate.getTime() + (ld.dur - 1) * 86400000)
-
+      
       const result = insertLeave.run(
         ld.sid, ld.type, fmtDate(startDate), fmtDate(endDate), ld.dur,
         ld.reason, ld.urgency,
@@ -82,27 +82,27 @@ export function seedDatabase() {
         ld.status, ld.stage || 'initial', ld.returnStatus || null, ld.delayStatus || null,
         ld.step, ld.total, ld.rejectReason || null
       )
-
+      
       const leaveId = result.lastInsertRowid
 
       insertTimeline.run(leaveId, fmtDateTime(new Date(startDate.getTime() - 2 * 86400000)), '提交申请', '请假申请已提交', 'done')
-
+      
       if (ld.status === 'processing' && ld.step >= 1) {
         insertTimeline.run(leaveId, fmtDateTime(new Date(startDate.getTime() - 1 * 86400000)), '导师审批', '导师-李教授已审批通过', 'done')
         insertTimeline.run(leaveId, fmtDateTime(new Date()), '辅导员审批', '待辅导员-张辅导员审批', 'processing')
       }
-
+      
       if (ld.status === 'approved' && ld.step >= 2) {
         insertTimeline.run(leaveId, fmtDateTime(new Date(startDate.getTime() - 1 * 86400000)), '导师审批', '导师已审批通过', 'done')
         insertTimeline.run(leaveId, fmtDateTime(new Date(startDate.getTime() - 0.5 * 86400000)), '辅导员审批', '辅导员已审批通过', 'done')
         insertTimeline.run(leaveId, fmtDateTime(new Date()), '审批通过', '请假申请已审批通过，请按时返校', 'done')
       }
-
+      
       if (ld.status === 'rejected') {
         insertTimeline.run(leaveId, fmtDateTime(new Date(startDate.getTime() - 1 * 86400000)), '导师审批', '导师已审批通过', 'done')
         insertTimeline.run(leaveId, fmtDateTime(new Date()), '审批拒绝', ld.rejectReason || '审批未通过', 'error')
       }
-
+      
       if (ld.stage === 'return') {
         insertTimeline.run(leaveId, fmtDateTime(new Date(endDate.getTime() - 1 * 86400000)), '申请返校', '返校申请已提交', ld.returnStatus === 'processing' ? 'processing' : 'done')
         if (ld.returnStatus === 'approved') {

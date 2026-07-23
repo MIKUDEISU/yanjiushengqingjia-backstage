@@ -15,6 +15,7 @@ db.pragma('foreign_keys = ON')
 
 export function initDatabase() {
   db.exec(`
+    -- 用户表：学生 + 审批人（导师/辅导员/院领导/副书记）
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -32,39 +33,58 @@ export function initDatabase() {
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 请假申请表
     CREATE TABLE IF NOT EXISTS leaves (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       student_id INTEGER NOT NULL REFERENCES users(id),
+      
+      -- 申请信息
       leave_type TEXT NOT NULL CHECK(leave_type IN ('事假','病假','回家','探亲','其他')),
       start_date TEXT NOT NULL,
       end_date TEXT NOT NULL,
       duration INTEGER NOT NULL,
       reason TEXT NOT NULL,
       urgency TEXT NOT NULL DEFAULT 'normal' CHECK(urgency IN ('normal','urgent','critical')),
+      
+      -- 目的地信息（研究生需求）
       leaving_city INTEGER NOT NULL DEFAULT 0,
       destination_province TEXT,
       destination_city TEXT,
       destination_detail TEXT,
       destinations_json TEXT,
+      
+      -- 联系信息
       personal_phone TEXT,
       emergency_contact_name TEXT,
       emergency_contact_phone TEXT,
+      
+      -- 状态管理
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','approved','rejected')),
       stage TEXT NOT NULL DEFAULT 'initial' CHECK(stage IN ('initial','return','delay')),
+      
+      -- 返校/延期状态
       return_status TEXT CHECK(return_status IN ('processing','approved','rejected')),
       delay_status TEXT CHECK(delay_status IN ('processing','approved','rejected')),
       delay_reason TEXT,
       delay_days INTEGER DEFAULT 0,
+      
+      -- 审批状态
       current_approver_id INTEGER REFERENCES users(id),
       current_step INTEGER DEFAULT 0,
       total_steps INTEGER DEFAULT 1,
       reject_reason TEXT,
+      
+      -- 审批流程配置（JSON）
       approval_config TEXT,
+      
+      -- 短信通知
       sms_sent INTEGER DEFAULT 0,
+      
       created_at TEXT DEFAULT (datetime('now','localtime')),
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 审批时间轴
     CREATE TABLE IF NOT EXISTS timeline (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       leave_id INTEGER NOT NULL REFERENCES leaves(id) ON DELETE CASCADE,
@@ -76,6 +96,7 @@ export function initDatabase() {
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 附件表
     CREATE TABLE IF NOT EXISTS attachments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       leave_id INTEGER NOT NULL REFERENCES leaves(id) ON DELETE CASCADE,
@@ -87,6 +108,7 @@ export function initDatabase() {
       created_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 系统配置表
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
@@ -94,6 +116,7 @@ export function initDatabase() {
       updated_at TEXT DEFAULT (datetime('now','localtime'))
     );
 
+    -- 索引
     CREATE INDEX IF NOT EXISTS idx_leaves_student ON leaves(student_id);
     CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
     CREATE INDEX IF NOT EXISTS idx_leaves_stage ON leaves(stage);
@@ -105,7 +128,7 @@ export function initDatabase() {
   const insertSetting = db.prepare(`
     INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)
   `)
-
+  
   insertSetting.run('max_leave_days', '56', '最长请假天数（超过8周=56天禁止提交）')
   insertSetting.run('return_advance_days', '1', '返校需提前天数')
   insertSetting.run('upload_max_size_mb', '2', '附件上传最大大小(MB)')
