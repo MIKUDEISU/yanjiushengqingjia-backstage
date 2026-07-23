@@ -1,6 +1,6 @@
+import bcrypt from 'bcryptjs'
 import { db } from '../database.js'
 import { generateToken } from '../middleware/auth.js'
-import bcrypt from 'bcryptjs'
 
 export function login(req, res) {
   try {
