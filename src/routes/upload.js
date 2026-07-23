@@ -25,7 +25,7 @@ const fileFilter = (req, file, cb) => {
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
   ]
-
+  
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true)
   } else {

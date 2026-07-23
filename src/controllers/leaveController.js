@@ -51,6 +51,7 @@ function getLeaveDetail(leaveId) {
   }
 }
 
+
 export function getLeaves(req, res) {
   try {
     const { status, urgency, studentName, studentId, type, page = 1, pageSize = 20, role } = req.query
@@ -61,7 +62,8 @@ export function getLeaves(req, res) {
     if (req.user.role === 'student') {
       sql += ' AND l.student_id = ?'
       params.push(req.user.id)
-    } else if (req.user.role === 'tutor' && req.user.department) {
+    }
+    else if (req.user.role === 'tutor' && req.user.department) {
       sql += ' AND u.department = ?'
       params.push(req.user.department)
     }
@@ -118,6 +120,7 @@ export function getLeaves(req, res) {
   }
 }
 
+
 export function getLeaveById(req, res) {
   try {
     const leave = getLeaveDetail(parseInt(req.params.id))
@@ -136,6 +139,7 @@ export function getLeaveById(req, res) {
   }
 }
 
+
 export function submitLeave(req, res) {
   try {
     const {
@@ -151,6 +155,7 @@ export function submitLeave(req, res) {
 
     const duration = calcDuration(startDate, endDate)
 
+    // 超过8周禁止提交
     if (duration > 56) {
       return res.status(400).json({
         code: 400,
@@ -159,6 +164,7 @@ export function submitLeave(req, res) {
       })
     }
 
+    // 校验返校需提前1天
     const startDateObj = new Date(startDate)
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
@@ -172,7 +178,7 @@ export function submitLeave(req, res) {
     }
 
     const activeLeave = db.prepare(`
-      SELECT id FROM leaves
+      SELECT id FROM leaves 
       WHERE student_id = ? AND status IN ('pending','processing')
     `).get(req.user.id)
     if (activeLeave) {
@@ -184,7 +190,7 @@ export function submitLeave(req, res) {
     }
 
     const needReturn = db.prepare(`
-      SELECT id FROM leaves
+      SELECT id FROM leaves 
       WHERE student_id = ? AND status = 'approved' AND stage = 'initial'
     `).get(req.user.id)
     if (needReturn) {
@@ -196,6 +202,7 @@ export function submitLeave(req, res) {
     }
 
     const { steps } = calcApprovalSteps(duration)
+
     const student = db.prepare('SELECT department FROM users WHERE id = ?').get(req.user.id)
     const firstApprover = getApproverByRole('tutor', student?.department)
 
@@ -254,6 +261,7 @@ export function submitLeave(req, res) {
   }
 }
 
+
 export function approveLeave(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -306,6 +314,7 @@ export function approveLeave(req, res) {
   }
 }
 
+
 export function rejectLeave(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -340,6 +349,7 @@ export function rejectLeave(req, res) {
   }
 }
 
+
 export function returnBackLeave(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -370,6 +380,7 @@ export function returnBackLeave(req, res) {
   }
 }
 
+
 export function resubmitLeave(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -397,7 +408,7 @@ export function resubmitLeave(req, res) {
 
     db.transaction(() => {
       db.prepare(`
-        UPDATE leaves SET
+        UPDATE leaves SET 
           leave_type=?, start_date=?, end_date=?, duration=?, reason=?, urgency=?,
           leaving_city=?, destination_province=?, destination_city=?, destination_detail=?,
           personal_phone=?, emergency_contact_name=?, emergency_contact_phone=?,
@@ -427,6 +438,7 @@ export function resubmitLeave(req, res) {
   }
 }
 
+
 export function applyReturn(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -454,6 +466,7 @@ export function applyReturn(req, res) {
     res.status(500).json({ code: 500, message: '服务器内部错误' })
   }
 }
+
 
 export function approveReturn(req, res) {
   try {
@@ -487,6 +500,7 @@ export function approveReturn(req, res) {
   }
 }
 
+
 export function rejectReturn(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -517,6 +531,7 @@ export function rejectReturn(req, res) {
   }
 }
 
+
 export function applyDelay(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -545,6 +560,7 @@ export function applyDelay(req, res) {
     res.status(500).json({ code: 500, message: '服务器内部错误' })
   }
 }
+
 
 export function approveDelay(req, res) {
   try {
@@ -578,6 +594,7 @@ export function approveDelay(req, res) {
   }
 }
 
+
 export function rejectDelay(req, res) {
   try {
     const leaveId = parseInt(req.params.id)
@@ -604,6 +621,83 @@ export function rejectDelay(req, res) {
     res.json({ code: 200, message: '已驳回延期申请', data: updated })
   } catch (err) {
     console.error('[Leave] 驳回延期失败:', err)
+    res.status(500).json({ code: 500, message: '服务器内部错误' })
+  }
+}
+
+
+export function getStatistics(req, res) {
+  try {
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+    const overview = {
+      totalLeaves: db.prepare('SELECT COUNT(*) as count FROM leaves').get().count,
+      todayLeaves: db.prepare("SELECT COUNT(*) as count FROM leaves WHERE start_date <= ? AND end_date >= ?").get(today, today).count,
+      pendingCount: db.prepare("SELECT COUNT(*) as count FROM leaves WHERE status IN ('pending','processing')").get().count,
+      approvedCount: db.prepare("SELECT COUNT(*) as count FROM leaves WHERE status='approved'").get().count,
+      rejectedCount: db.prepare("SELECT COUNT(*) as count FROM leaves WHERE status='rejected'").get().count,
+      overdueCount: db.prepare("SELECT COUNT(*) as count FROM leaves WHERE status='approved' AND stage='initial' AND end_date < ?").get(today).count
+    }
+
+    const typeDistribution = db.prepare(`
+      SELECT leave_type as name, COUNT(*) as value FROM leaves GROUP BY leave_type ORDER BY value DESC
+    `).all()
+
+    const durationDistribution = [
+      { name: '< 2周', value: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE duration < 14').get().count },
+      { name: '2-4周', value: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE duration >= 14 AND duration < 28').get().count },
+      { name: '4-8周', value: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE duration >= 28 AND duration < 57').get().count },
+      { name: '> 8周', value: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE duration >= 57').get().count }
+    ]
+
+    const departmentStats = db.prepare(`
+      SELECT u.department as name, COUNT(*) as value 
+      FROM leaves l JOIN users u ON l.student_id = u.id 
+      WHERE u.department IS NOT NULL 
+      GROUP BY u.department ORDER BY value DESC
+    `).all()
+
+    const destinationDistribution = db.prepare(`
+      SELECT destination_province as name, COUNT(*) as value 
+      FROM leaves WHERE leaving_city=1 AND destination_province IS NOT NULL 
+      GROUP BY destination_province ORDER BY value DESC
+    `).all()
+
+    const stayLeaveRatio = {
+      staying: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE leaving_city=0').get().count,
+      leaving: db.prepare('SELECT COUNT(*) as count FROM leaves WHERE leaving_city=1').get().count
+    }
+
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const monthlyRanking = db.prepare(`
+      SELECT u.name, u.student_id, u.department, COUNT(*) as count 
+      FROM leaves l JOIN users u ON l.student_id = u.id 
+      WHERE l.created_at >= ? 
+      GROUP BY l.student_id ORDER BY count DESC LIMIT 10
+    `).all(monthStart)
+
+    const overdueList = db.prepare(`
+      SELECT l.*, u.name as student_name, u.student_id as sid, u.department, u.class_name
+      FROM leaves l JOIN users u ON l.student_id = u.id
+      WHERE l.status='approved' AND l.stage='initial' AND l.end_date < ?
+    `).all(today)
+
+    res.json({
+      code: 200,
+      data: {
+        overview,
+        typeDistribution,
+        durationDistribution,
+        departmentStats,
+        destinationDistribution,
+        stayLeaveRatio,
+        monthlyRanking,
+        overdueList
+      }
+    })
+  } catch (err) {
+    console.error('[Leave] 统计失败:', err)
     res.status(500).json({ code: 500, message: '服务器内部错误' })
   }
 }
